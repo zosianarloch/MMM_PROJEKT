@@ -34,4 +34,5 @@ while True:
     else:
         print('Nieprawidłowy wybór.')
 
-
+plt.plot(t, u)
+plt.show()
