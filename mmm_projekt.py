@@ -1,18 +1,37 @@
 import numpy as np 
 import matplotlib.pyplot as plt
+from scipy.signal import square, sawtooth
 
-a0, a1 =1, 0
-b0, b1, b2 = 0, 1, 2
-c0, c1, c2 = 1, 1, 0
-d0, d1, d2 = 4, 4, 1
+def main():
+    a1, a0 = 1, 2
+    b2, b1, b0 = 1, 3, 2
 
-Lp=np.array([a1, a0])
-Mp=np.array([b2, b1, b0])
+    c2, c1, c0 = 1, 1, 1
+    d2, d1, d0 = 1, 2, 1
 
-Lc=np.array([c2, c1, c0])
-Mc=np.array([d2, d1, d0])
-print(Lp)
+    # Parametry symulacji
+    dt = 0.01
+    t = np.arange(0, 10, dt)
 
+    # Wybór sygnału wejściowegop
+    print('Wybierz rodzaj sygnału:')
+    print('1 - Prostokątny')
+    print('2 - Trójkątny')
+    print('3 - Harmoniczny')
 
+    
+    while True: 
+        wybor = input('Podaj numer:') 
+        if wybor == '1':
+            u = square(2 * np.pi * 0.5 * t)
+            break
+        elif wybor == '2':
+            u = sawtooth(2 * np.pi * 0.5 * t, 0.5)  # trójkątny
+            break
+        elif wybor == '3':
+            u = np.sin(2 * np.pi * 1 * t)
+            break
+        else:
+            print('Nieprawidłowy wybór.')
 
 
