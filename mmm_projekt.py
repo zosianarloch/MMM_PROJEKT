@@ -2,6 +2,20 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import square, sawtooth
 
+#Symuluje blok dynamiczny 2. rzędu metodą Eulera do przodu z uwzględnieniem pochodnej wejścia
+#rozważyć sytuacje gdy współczynniki w mianowniku = 0
+def simulate_block_step(num, den, u_in, u_prev, y, dy, dt):
+    b2, b1, b0 = den
+    a1 = num[0] if len(num) > 1 else 0
+    a0 = num[-1] if len(num) > 0 else 0
+
+    du = (u_in - u_prev) / dt
+    rhs = a1 * du + a0 * u_in
+    ddy = (rhs - b1 * dy - b0 * y) / b2
+    dy_new = dy + dt * ddy
+    y_new = y + dt * dy_new
+    return y_new, dy_new
+
 # Parametry układu
 a1, a0 = 1, 2
 b2, b1, b0 = 1, 3, 2
