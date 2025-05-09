@@ -1,10 +1,10 @@
-import numpy as np 
+import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.widgets import RadioButtons
 from scipy.signal import sawtooth
 
-#Symuluje blok dynamiczny 2. rzędu metodą Eulera do przodu z uwzględnieniem pochodnej wejścia
-#rozważyć sytuacje gdy współczynniki w mianowniku = 0
 def simulate_block_step(num, den, u_in, u_prev, y, dy, dt):
+    """Symuluje blok dynamiczny 2. rzędu metodą Eulera do przodu z uwzględnieniem pochodnej wejścia"""
     b2, b1, b0 = den
     a1 = num[0] if len(num) > 1 else 0
     a0 = num[-1] if len(num) > 0 else 0
@@ -21,46 +21,87 @@ def simulator():
     a1, a0 = 1, 2
     b2, b1, b0 = 1, 3, 2
 
+    den = b2, b1, b0 
+    num = a1, a0 
+
     # Parametry sterownika
     c2, c1, c0 = 1, 1, 1
     d2, d1, d0 = 1, 2, 1
+
+    licz = c2, c1, c0
+    mian = d2, d1, d0
 
     # Czas symulacji
     dt = 0.01
     t = np.arange(0, 10, dt)
     f = 0.5
 
-    # Wybór sygnału wejściowego
-    print("Wybierz rodzaj sygnału:")
-    print("1 - Prostokątny")
-    print("2 - Trójkątny")
-    print("3 - Harmoniczny")
+    # Domyślny sygnał wejściowy i odpowiedź
+    default_label = 'Prostokątny'
+    u = generate_signal(f, t, default_label)
+    y = system_response(num, den, licz, mian, u, t, dt)
 
-    while True: 
-        wybor = input('Podaj numer:') 
-        if wybor == '1':
+
+    # Tworzenie okna i osi wykresu
+    fig, ax = plt.subplots()
+    plt.subplots_adjust(left=0.3)  
+    input_line, = ax.plot(t, u, 'r--', label='Sygnał wejściowy')
+    output_line, = ax.plot(t, y, 'b', label='Odpowiedź układu')
+    ax.legend()
+    ax.set_title('Symulacja układu')
+    ax.set_xlabel('Czas [s]')
+    ax.set_ylabel('Amplituda')
+    ax.grid(True)
+    # Dodanie radio buttons
+    ax_radio = plt.axes([0.05, 0.4, 0.185, 0.2])  # [left, bottom, width, height]
+    radio = RadioButtons(ax_radio, ['Prostokątny', 'Trójkątny', 'Sinusoidalny'])
+
+    # Funkcja aktualizująca wykres po kliknięciu
+    def update(label):
+        u = generate_signal(f, t, label)
+        y = system_response(num, den, licz, mian, u, t, dt)
+        input_line.set_ydata(u)
+        output_line.set_ydata(y)
+        fig.canvas.draw_idle()
+
+    
+    radio.on_clicked(update)
+
+    plt.show()
+
+def generate_signal(f, t, wybor):
+        # Wybór sygnału wejściowego
+        """print("Wybierz rodzaj sygnału:")
+        print("1 - Prostokątny")
+        print("2 - Trójkątny")
+        print("3 - Harmoniczny")"""
+        #while True:
+            #wybor = input("Podaj numer: ")
+        if wybor == 'Prostokątny':
             # Sygnał prostokątny: 1 jeśli sin(2πft) >= 0, w przeciwnym razie -1
-            u = np.where(np.sin(2 * np.pi * f * t) >= 0, 1, -1)
-            break
-        elif wybor == '2':
-            u = sawtooth(2 * np.pi * f * t, 0.5)  # trójkątny
-            break
-        elif wybor == '3':
-            u = np.sin(2 * np.pi * 1 * t) # harmoniczny
-            break
+            return np.where(np.sin(2 * np.pi * f * t) >= 0, 1, -1)
+        elif wybor == 'Trójkątny':
+            return sawtooth(2 * np.pi * f * t, 0.5)
+        elif wybor == 'Sinusoidalny':
+            return np.sin(2 * np.pi * f * t)
         else:
-            print('Nieprawidłowy wybór.')
+            raise ValueError("Nieznany typ sygnału: " + wybor)
 
+def system_response(num, den, licz, mian, u, t, dt):
     # Inicjalizacja wektorów i stanów
     y = np.zeros_like(t)        # wyjście układu
-    u_c = np.zeros_like(t)      # wyjście sterownika
+    u_c = np.zeros_like(t)      # wyjście sterownika (sygnał sterujący)
+    b2, b1, b0 = den
+    a1, a0 = num
+    c2, c1, c0 = licz
+    d2, d1, d0 = mian
 
-    dy_obj = 0                  # pochodna obiektu
-    dy_ctrl = 0                 # pochodna sterownika
+    dy_obj = 0                  # pochodna wyjścia obiektu
+    dy_ctrl = 0                 # pochodna wyjścia sterownika (sygnał sterujący)
     y_obj = 0                   # aktualna wartość wyjścia obiektu
     y_ctrl = 0                  # aktualna wartość wyjścia sterownika (sygnał sterujący)
-    e_prev = 0                  # błąd sterowania
-    u_c_prev = 0                # błąd sterowania z poprzedniego kroku
+    e_prev = 0                  # błąd sterowania z poprzedniego kroku
+    u_c_prev = 0                # sygnał sterujący z poprzedniego kroku
 
     # Symulacja układu zamkniętego
     for i in range(len(t) - 1):
@@ -85,17 +126,7 @@ def simulator():
         # sygnał wyjściowy i jego pochodna
         y[i+1] = y_obj
         u_c_prev = u_c[i+1]
-
-    # Wykres
-    plt.figure()
-    plt.plot(t, u, 'r--', label='Sygnał zadany (u)')
-    plt.plot(t, y, 'b', label='Wyjście układu (y)')
-    plt.xlabel('Czas [s]')
-    plt.ylabel('Amplituda')
-    plt.title('Układ z ujemnym sprzężeniem zwrotnym')
-    plt.grid(True)
-    plt.legend()
-    plt.show()
+    return y
 
 # Uruchomienie
 if __name__ == "__main__":
