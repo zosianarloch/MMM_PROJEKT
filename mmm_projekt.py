@@ -1,14 +1,29 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import RadioButtons, Slider
-from scipy.signal import sawtooth
 
-def simulate_block_step(num, den, u_in, u_prev, y, dy, dt):
+def simulate_block_step(num, den, u_now, u_prev, u_prev2, y, dy, dt):
+    """Symuluje blok dynamiczny 2. rzędu metodą Eulera do przodu (adaptacyjna dla rzędu licznika)"""
     b2, b1, b0 = den
-    a1 = num[0] if len(num) > 1 else 0
-    a0 = num[-1] if len(num) > 0 else 0
-    du = (u_in - u_prev) / dt
-    rhs = a1 * du + a0 * u_in
+
+    # Dopasowanie długości licznika
+    if len(num) == 3:  # np. [c2, c1, c0]
+        a2, a1, a0 = num
+        du = (u_now - u_prev) / dt
+        ddu = (u_now - 2 * u_prev + u_prev2) / dt**2
+    elif len(num) == 2:  # np. [a1, a0]
+        a2 = 0
+        a1, a0 = num
+        du = (u_now - u_prev) / dt
+        ddu = 0
+    else:  # tylko [a0]
+        a2 = 0
+        a1 = 0
+        a0 = num[0]
+        du = 0
+        ddu = 0
+
+    rhs = a2 * ddu + a1 * du + a0 * u_now
     ddy = (rhs - b1 * dy - b0 * y) / b2
     dy_new = dy + dt * ddy
     y_new = y + dt * dy_new
@@ -18,7 +33,7 @@ def generate_signal(f, A, t, wybor):
     if wybor == 'Prostokątny':
         return A * np.where(np.sin(2 * np.pi * f * t) >= 0, 1, -1)
     elif wybor == 'Trójkątny':
-        return A * (2 * np.abs(2 * ((t*f) % 1) - 1) - 1)
+        return A * (2 * np.abs(2 * ((t * f) % 1) - 1) - 1)
     elif wybor == 'Sinusoidalny':
         return A * np.sin(2 * np.pi * f * t)
     else:
@@ -27,50 +42,58 @@ def generate_signal(f, A, t, wybor):
 def system_response(num, den, licz, mian, u, t, dt):
     y = np.zeros_like(t)
     u_c = np.zeros_like(t)
-    b2, b1, b0 = den
-    a1, a0 = num
-    c2, c1, c0 = licz
-    d2, d1, d0 = mian
     dy_obj = 0
     dy_ctrl = 0
     y_obj = 0
     y_ctrl = 0
     e_prev = 0
+    e_prev2 = 0
     u_c_prev = 0
+    u_c_prev2 = 0
 
-    for i in range(len(t) - 1):
+    for i in range(1, len(t) - 1):
         e = u[i] - y[i]
-        y_ctrl, dy_ctrl = simulate_block_step([c2, c1, c0], [d2, d1, d0], e, e_prev, y_ctrl, dy_ctrl, dt)
+        y_ctrl, dy_ctrl = simulate_block_step(licz, mian, e, e_prev, e_prev2, y_ctrl, dy_ctrl, dt)
         u_c[i + 1] = y_ctrl
+        e_prev2 = e_prev
         e_prev = e
-        y_obj, dy_obj = simulate_block_step([a1, a0], [b2, b1, b0], u_c[i + 1], u_c_prev, y_obj, dy_obj, dt)
+
+        y_obj, dy_obj = simulate_block_step(num, den, u_c[i + 1], u_c_prev, u_c_prev2, y_obj, dy_obj, dt)
         y[i + 1] = y_obj
+        u_c_prev2 = u_c_prev
         u_c_prev = u_c[i + 1]
+
     return y
 
 def simulator_with_sliders():
-    # Parametry transmitancji
-    a1, a0 = 1, 2
-    b2, b1, b0 = 1, 3, 2
-    num = a1, a0
-    den = b2, b1, b0
-
-    c2, c1, c0 = 1, 1, 1
-    d2, d1, d0 = 1, 2, 1
-    licz = c2, c1, c0
-    mian = d2, d1, d0
-
     dt = 0.01
     t = np.arange(0, 10, dt)
     f = 0.5
     A = 1.0
-
     signal_type = 'Prostokątny'
-    u = generate_signal(f, A, t, signal_type)
-    y = system_response(num, den, licz, mian, u, t, dt)
 
+    param_defaults = {
+        'a1': 1.0, 'a0': 2.0,
+        'b2': 1.0, 'b1': 3.0, 'b0': 2.0,
+        'c2': 1.0, 'c1': 1.0, 'c0': 1.0,
+        'd2': 1.0, 'd1': 2.0, 'd0': 1.0,
+    }
+
+    sliders = {}
+    y_pos = 0.6
     fig, ax = plt.subplots()
-    plt.subplots_adjust(left=0.35, bottom=0.3)
+    plt.subplots_adjust(left=0.4, bottom=0.4)
+
+    # Inicjalizacja sygnału i odpowiedzi
+    u = generate_signal(f, A, t, signal_type)
+    y = system_response(
+        [param_defaults['a1'], param_defaults['a0']],
+        [param_defaults['b2'], param_defaults['b1'], param_defaults['b0']],
+        [param_defaults['c2'], param_defaults['c1'], param_defaults['c0']],
+        [param_defaults['d2'], param_defaults['d1'], param_defaults['d0']],
+        u, t, dt
+    )
+
     input_line, = ax.plot(t, u, 'r--', label='Sygnał wejściowy')
     output_line, = ax.plot(t, y, 'b', label='Odpowiedź układu')
     ax.set_xlabel('Czas [s]')
@@ -79,35 +102,55 @@ def simulator_with_sliders():
     ax.grid(True)
     ax.legend()
 
-    ax_radio = plt.axes([0.05, 0.6, 0.25, 0.2])
+    # Slidery dla parametrów transmitancji
+    fig.text(0.05, 0.65, "Parametry transmitancji", fontsize=12, fontweight='bold')
+    for param in param_defaults:
+        ax_slider = plt.axes([0.05, y_pos, 0.25, 0.025])
+        sliders[param] = Slider(ax_slider, param, 0.0, 5.0, valinit=param_defaults[param])
+        y_pos -= 0.035
+
+    # Slidery dla sygnału
+    fig.text(0.05, 0.18, "Parametry sygnału wejściowego", fontsize=12, fontweight='bold')
+    ax_slider_f = plt.axes([0.05, 0.08, 0.25, 0.03])
+    slider_f = Slider(ax_slider_f, 'f [Hz]', 0.0, 7.0, valinit=f)
+
+    ax_slider_A = plt.axes([0.05, 0.13, 0.25, 0.03])
+    slider_A = Slider(ax_slider_A, 'A [V]', 0.0, 10.0, valinit=A)
+
+    # Radio buttons
+    fig.text(0.05, 0.9, "Wybór sygnału wejściowego", fontsize=12, fontweight='bold')
+    ax_radio = plt.axes([0.05, 0.75, 0.25, 0.12])
     radio = RadioButtons(ax_radio, ['Prostokątny', 'Trójkątny', 'Sinusoidalny'])
 
-    ax_slider_f = plt.axes([0.05, 0.15, 0.25, 0.03])
-    slider_f = Slider(ax_slider_f, 'Częstotliwość [Hz]', 0.1, 7.0, valinit=f)
-
-    ax_slider_A = plt.axes([0.05, 0.1, 0.25, 0.03])
-    slider_A = Slider(ax_slider_A, 'Amplituda [V]', 0.0, 10.0, valinit=A)
-
     def update_plot(_):
-        f = slider_f.val
-        A = slider_A.val
+        f_val = slider_f.val
+        A_val = slider_A.val
         typ = radio.value_selected
-        u = generate_signal(f, A, t, typ)
+
+        u = generate_signal(f_val, A_val, t, typ)
+
+        num = [sliders['a1'].val, sliders['a0'].val]
+        den = [sliders['b2'].val, sliders['b1'].val, sliders['b0'].val]
+        licz = [sliders['c2'].val, sliders['c1'].val, sliders['c0'].val]
+        mian = [sliders['d2'].val, sliders['d1'].val, sliders['d0'].val]
+
         y = system_response(num, den, licz, mian, u, t, dt)
         input_line.set_ydata(u)
         output_line.set_ydata(y)
 
-        # Automatyczne skalowanie osi Y
         y_min = min(np.min(u), np.min(y))
         y_max = max(np.max(u), np.max(y))
         ax.set_ylim(y_min - 0.1 * abs(y_min), y_max + 0.1 * abs(y_max))
 
         fig.canvas.draw_idle()
 
-    radio.on_clicked(update_plot)
+    for s in sliders.values():
+        s.on_changed(update_plot)
     slider_f.on_changed(update_plot)
     slider_A.on_changed(update_plot)
+    radio.on_clicked(update_plot)
 
+    plt.get_current_fig_manager().resize(1200, 800)
     plt.show()
 
 if __name__ == "__main__":
